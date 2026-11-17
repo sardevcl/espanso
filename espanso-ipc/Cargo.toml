@@ -16,3 +16,4 @@ workspace = true
 
 [target.'cfg(windows)'.dependencies]
 named_pipe = "0.4.1"
+windows = { workspace = true, features = ["Win32_System_RemoteDesktop"] }

@@ -23,10 +23,38 @@ use log::{error, info};
 use named_pipe::{ConnectingServer, PipeClient, PipeOptions};
 use serde::{de::DeserializeOwned, Serialize};
 use std::io::Write;
+use windows::Win32::System::RemoteDesktop::ProcessIdToSessionId;
 
 use crate::{EventHandler, EventHandlerResponse, IPCClient, IPCClientError, IPCServer};
 
 const DEFAULT_CLIENT_TIMEOUT: u32 = 2000;
+
+/// Build the named pipe path for the given IPC id.
+///
+/// Named pipes are machine-wide on Windows, so a fixed name would collide when
+/// several users run espanso at the same time (e.g. on a terminal server).
+/// To avoid that, the name is scoped to the current Windows session and user.
+/// All espanso processes of a user run in the same session, so the daemon,
+/// the worker and the CLI commands compute the same name.
+fn pipe_name(id: &str) -> String {
+    let user: String = std::env::var("USERNAME")
+        .unwrap_or_default()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .collect();
+
+    match current_session_id() {
+        Some(session_id) => format!("\\\\.\\pipe\\{id}-{session_id}-{user}"),
+        None => format!("\\\\.\\pipe\\{id}-{user}"),
+    }
+}
+
+fn current_session_id() -> Option<u32> {
+    let mut session_id: u32 = 0;
+    // SAFETY: plain Win32 call with the current process id and a valid out-pointer
+    unsafe { ProcessIdToSessionId(std::process::id(), &mut session_id) }.ok()?;
+    Some(session_id)
+}
 
 pub struct WinIPCServer {
     server: Option<ConnectingServer>,
@@ -34,7 +62,7 @@ pub struct WinIPCServer {
 
 impl WinIPCServer {
     pub fn new(id: &str) -> Result<Self> {
-        let pipe_name = format!("\\\\.\\pipe\\{id}");
+        let pipe_name = pipe_name(id);
 
         let options = PipeOptions::new(&pipe_name);
         let server = Some(options.single()?);
@@ -105,7 +133,7 @@ pub struct WinIPCClient {
 
 impl WinIPCClient {
     pub fn new(id: &str) -> Result<Self> {
-        let pipe_name = format!("\\\\.\\pipe\\{id}");
+        let pipe_name = pipe_name(id);
 
         let stream = PipeClient::connect_ms(pipe_name, DEFAULT_CLIENT_TIMEOUT)?;
         Ok(Self { stream })

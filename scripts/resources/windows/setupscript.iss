@@ -66,4 +66,4 @@ Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Paramete
 Filename: "{app}\{#MyAppExeName}"; Parameters: "launcher"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
-Filename: "{cmd}"; Parameters: "/C ""taskkill /im espansod.exe /f /t"
+Filename: "{cmd}"; Parameters: "/C ""taskkill /im espansod.exe /f /t /fi ""USERNAME eq {username}"""""

@@ -1,0 +1,69 @@
+name: Terminalserver Build (Windows)
+
+# Windows-only build of the terminal-server variant (session-scoped named pipes).
+# Mirrors the "windows" job of dev-release.yml.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'terminalserver-*'
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-ts-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Build
+        run: |
+          cargo build --release
+      - name: Clippy (espanso-ipc)
+        run: |
+          cargo clippy -p espanso-ipc --release
+      - name: Test
+        run: |
+          cargo test \
+            --release \
+            --workspace \
+            --exclude espanso-modulo \
+            --exclude espanso-ipc \
+            --no-default-features \
+            --features native-tls
+      - name: Build resources
+        shell: pwsh
+        run: |
+            $env:EXEC_PATH = "target\release\espanso.exe"
+            scripts\build_windows_resources.ps1
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress
+      - name: Build installer
+        shell: pwsh
+        run: |
+            Install-Module -Name 'PSTOML' -Force
+            scripts\build_windows_installer.ps1
+      - name: Build portable mode archive
+        shell: pwsh
+        run: |
+            scripts\build_windows_portable.ps1
+      - uses: actions/upload-artifact@v4
+        name: Upload artifacts
+        with:
+          name: Espanso-Terminalserver-Windows
+          path: |
+            target/windows/Espanso-Win-Installer-x86_64.exe
+            target/windows/Espanso-Win-Portable-x86_64.zip
